@@ -1,4 +1,12 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <string.h>
+#include <errno.h>
+#include <syslog.h>
+#include <fcntl.h>
+//#include <linux/stat.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +24,14 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int ret;
+    ret=system(cmd);
+    if (ret==1) {
+        return true;
+    }
+    else {
+        return false;
+    }
 }
 
 /**
@@ -58,10 +72,40 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    //int ret,stat_loc;
+    int err;
+    pid_t pid;
+    bool ret;
+    pid=fork();
+    if (pid==-1){
+        fprintf(stderr,"Failed to create child process");
+        return false;
+    }
+    //slicing the arguments to exclude the path command##################
+    char *dest[count];
+    for (i=1;i<count;i++){
+        dest[i-1]=command[i];
+    }
+    //###################################################################
+    err=execv(command[0],dest);
+    if(err==-1){
+        fprintf(stderr,"Error executing");
+        fprintf(stdout,"Error executing");
+        return false;
+    }
+    pid=wait(NULL);
+    if (pid != 0){
+        ret = true;
+    }
+    else{
+        ret = false;
+        fprintf(stderr,"No response from child process");
+        fprintf(stdout,"No response from child process");
 
+    }
     va_end(args);
 
-    return true;
+    return ret;
 }
 
 /**
@@ -93,7 +137,49 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
+/*File Open sequence and validation*/
+
+openlog(NULL,0,LOG_USER);
+pid_t pid;
+bool ret;
+if (fork()==0){
+    int fd = open(outputfile,O_RDWR | O_CREAT,S_IRUSR | S_IWUSR);
+    int err=errno;
+    if (fd==-1) {
+        //fprintf(stderr,"The value of error is %d after attempting to open file %s\n",errno,filename);
+        if (err==2) {
+            syslog(LOG_ERR,"ERRNO: 2 - No such file or directory");
+            return false;
+        }
+        else {
+            syslog(LOG_ERR,"Error opening file %d, please see man page errno for more details",err);
+            return false;
+        }
+    }
+
+    dup2(fd,1);
+    close(fd);
+    //slicing the arguments to exclude the path command##################
+    char *dest[count];
+    for (i=1;i<count;i++){
+        dest[i-1]=command[i];
+    }
+    //###################################################################
+    err=execv(command[0],dest);
+    if(err==-1){
+        return false;
+    }
+    pid=wait(NULL);
+    if (pid != 0){
+        ret = true;
+    }
+    else{
+        ret = false;
+        fprintf(stderr,"No response from child process");
+    }
+}
+
     va_end(args);
 
-    return true;
+    return ret;
 }
