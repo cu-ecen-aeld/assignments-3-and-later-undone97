@@ -12,7 +12,7 @@ if (argc!=3) { //invalid #arguments
 }
 
 const char *filename = argv[1]; //filename
-FILE *file = fopen(filename,"w");
+FILE *file = fopen(filename,"a");
 int err=errno;
 if (file==NULL) {
 	//fprintf(stderr,"The value of error is %d after attempting to open file %s\n",errno,filename);
