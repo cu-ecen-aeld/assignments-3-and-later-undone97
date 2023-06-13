@@ -56,13 +56,13 @@ for i in $( seq 1 $NUMFILES)
 do
 	if [ $assignment != 'assignment1' ]
 	then
-		/bin/writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+		writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 	else
-		/bin/writer.sh "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+		writer.sh "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 	fi
 done
 
-OUTPUTSTRING=$(/bin/finder.sh "$WRITEDIR" "$WRITESTR")
+OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR")
 
 # remove temporary directories/file
 rm -rf /tmp/aeld-data
