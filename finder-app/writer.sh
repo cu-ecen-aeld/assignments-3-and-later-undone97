@@ -19,7 +19,7 @@ else
 			touch $writefile 
 		fi
 	fi
-	echo $writestr > $writefile || ( echo "Failed" && exit 1)
+	echo $writestr >> $writefile || ( echo "Failed" && exit 1)
 	exit 0
 fi
 
