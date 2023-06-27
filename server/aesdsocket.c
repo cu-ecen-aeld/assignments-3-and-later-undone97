@@ -22,7 +22,7 @@ sig_atomic_t volatile stop = 1;
 void sig_handler(int signum)
 {
     fprintf(stderr,"Got Interrupted by signal");
-    if (signum == SIGINT || signum == SIGTERM)
+    if (signum == SIGINT || signum == SIGTERM) {
         stop = 0;
         syslog(LOG_NOTICE, "Caught signal, exiting");
         if (remove(output_file_path) < 0) {
@@ -30,6 +30,8 @@ void sig_handler(int signum)
             exit(EXIT_FAILURE);
         }
         exit(EXIT_SUCCESS);
+    }
+
         /*TODO: Gracefully close all fp and sockets*/
 
 }
@@ -67,7 +69,6 @@ void read_socket_to_file(int socketd, int fd) {
             int bytes_wrote;
             int bytes_wrote_total=0;
             int bytes_to_write=total_read;
-            fprintf(stderr,ptr);
             while((bytes_wrote=write(fd,ptr+bytes_wrote_total,bytes_to_write))<bytes_to_write){
                 if (bytes_wrote < 0) {
                     syslog(LOG_ERR, "Failure to write to file, error %d", errno);
