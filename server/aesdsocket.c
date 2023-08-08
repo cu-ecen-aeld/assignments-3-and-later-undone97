@@ -11,13 +11,35 @@
 #include <arpa/inet.h>
 #include <syslog.h>
 #include <signal.h>
-
+#include <time.h>
+#include <pthread.h>
+#include "queue.h"
 
 #define PORT    9000
 
 char* output_file_path = "/var/tmp/aesdsocketdata";
 
 sig_atomic_t volatile stop = 1;
+pthread_t thread;
+struct thread_data *x;// = (struct thread_data *)malloc(sizeof *x);
+    
+pthread_mutex_t lock;
+
+struct thread_data{
+    pthread_t *thread;
+    pthread_mutex_t *mutex;
+    int socketd;
+    bool thread_complete_success;
+};
+
+typedef struct node
+{
+    pthread_t thread;
+    struct thread_data *x;// = (struct thread_data *)malloc(sizeof *x);
+    // This macro does the magic to point to other nodes
+    TAILQ_ENTRY(node) nodes;
+}node_t;
+typedef TAILQ_HEAD(head_s, node) head_t;
 
 void sig_handler(int signum)
 {
@@ -29,6 +51,7 @@ void sig_handler(int signum)
             syslog(LOG_ERR, "Failed to remove the file at %s upon termination, error: %s", output_file_path, strerror(errno));
             exit(EXIT_FAILURE);
         }
+        pthread_mutex_destroy(&lock);
         exit(EXIT_SUCCESS);
     }
 
@@ -36,7 +59,18 @@ void sig_handler(int signum)
 
 }
 
-
+void delay(int number_of_seconds)
+{
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+ 
+    // Storing start time
+    clock_t start_time = clock();
+ 
+    // looping till required time is not achieved
+    while (clock() < start_time + milli_seconds)
+        ;
+}
 
 
 void read_socket_to_file(int socketd, int fd) {
@@ -125,7 +159,63 @@ void write_file_to_socket(int conn_socket,int fd) {
 }
 
 
+void* socket_handler(void *ptr) {
+        struct thread_data* x=(struct thread_data *) ptr;
+        fprintf(stderr,"Locking file\n");
+        pthread_mutex_lock(x->mutex);
+        fprintf(stderr,"Opening file\n");
+        int fd = open(output_file_path, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+        if (fd < 0) {
+            perror("Could not open/create output file");
+            pthread_mutex_unlock(x->mutex);
+            pthread_exit((int *)EXIT_FAILURE);
+        }
 
+        read_socket_to_file(x->socketd,fd);
+        if (fsync(fd) < 0) {
+            syslog(LOG_ERR, "Failed to fsync file");
+            pthread_mutex_unlock(x->mutex);
+            pthread_exit((int *)EXIT_FAILURE);
+        }
+        write_file_to_socket(x->socketd,fd);
+        close(x->socketd);
+        if (fsync(fd) < 0) {
+            syslog(LOG_ERR, "Failed to fsync file");
+            pthread_mutex_unlock(x->mutex);
+            pthread_exit((int *)EXIT_FAILURE);
+        }
+        close(fd);
+        close(x->socketd);
+        x->thread_complete_success=true;
+        pthread_mutex_unlock(x->mutex);
+        return x;
+
+}
+
+void* timer(void *ptr) {    
+    struct thread_data* x=(struct thread_data *) ptr;
+    int fd = open(output_file_path, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+    if (fd < 0) {
+            perror("Could not open/create output file");
+            pthread_exit((int *)EXIT_FAILURE);
+    }
+
+    time_t t ;
+    struct tm *tmp ;
+    char MY_TIME[50];
+
+    while(1){
+        sleep(10);
+        time( &t );
+        tmp = localtime( &t );
+        strftime(MY_TIME, sizeof(MY_TIME), "%a, %d %b %Y %T %z", tmp);
+        pthread_mutex_lock(x->mutex);
+        dprintf(fd,"timestamp:%s\n",MY_TIME);
+        pthread_mutex_unlock(x->mutex);
+        
+    }
+    
+}
 
 int main(int argc, char* argv[]) {
     openlog("aesdsocket", LOG_CONS | LOG_PERROR | LOG_PID, LOG_USER);
@@ -212,34 +302,71 @@ int main(int argc, char* argv[]) {
             chdir("/");
         }
 
+    }    
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("\n mutex init has failed\n");
+        exit(EXIT_FAILURE);
     }
+    /*####################Linked List setup STARTS here#########################*/
+    TAILQ_HEAD(head_s, node) head;
+    // Initialize the head before use
+    TAILQ_INIT(&head);
+    struct node * ll_data = NULL;
+    struct node * next = NULL;
+    /*###################Linked List setup ENDS here############################*/
+    x = (struct thread_data *)malloc(sizeof *x);
+    /*Timer Thread setup START here*/
+    if (x==NULL) {
+            syslog(LOG_ERR,"Not enough Memory");
+            return false;
+    }
+    x->thread_complete_success=false;
+    x->mutex=&lock;
+    x->thread=&thread;
+    x->socketd=-1;
+    pthread_create(&thread,NULL,timer,(void*) x); /*Create thrad*/
+    /*Thread setup ENDS here*/
     if (listen(socket_fd, 3) < 0) {
         perror("listen");
         exit(EXIT_FAILURE);
     }
     int conn_socket=0;
     while ((conn_socket = accept(socket_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) > 0) {
-        int fd = open(output_file_path, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-        if (fd < 0) {
-            perror("Could not open/create output file");
-            exit(EXIT_FAILURE);
+        pthread_t thread;
+        fprintf(stderr,"Creating thread data\n");
+        struct thread_data *x = (struct thread_data *)malloc(sizeof *x);
+        if (x==NULL) {
+            syslog(LOG_ERR,"Not enough Memory");
+            return false;
+        }
+        x->thread_complete_success=false;
+        x->mutex=&lock;
+        x->thread=&thread;
+        x->socketd=conn_socket;
+        fprintf(stderr,"Creating thread\n");
+        pthread_create(&thread,NULL,socket_handler,(void*) x); /*Create thrad*/
+        fprintf(stderr,"Setting node of ll\n");
+        ll_data = malloc(sizeof(struct node));//every time a element is created, a new malloc must be done
+        ll_data->thread=thread;
+        ll_data->x=x;
+        TAILQ_INSERT_TAIL(&head, ll_data, nodes);
+        ll_data = NULL;
+        fprintf(stderr,"Looping existent threads\n");
+        TAILQ_FOREACH_SAFE(ll_data, &head, nodes,next)
+        {
+            if(pthread_join(ll_data->thread,NULL)==0){
+                fprintf(stderr,"Removing finished threads\n");        
+                TAILQ_REMOVE(&head, ll_data, nodes);
+                free(ll_data);
+                ll_data=NULL;
+            }
+            
         }
 
-        read_socket_to_file(conn_socket,fd);
-        if (fsync(fd) < 0) {
-            syslog(LOG_ERR, "Failed to fsync file");
-            exit(EXIT_FAILURE);
-        }
-        write_file_to_socket(conn_socket,fd);
-        close(conn_socket);
-        if (fsync(fd) < 0) {
-            syslog(LOG_ERR, "Failed to fsync file");
-            exit(EXIT_FAILURE);
-        }
-        close(fd);
-        close(conn_socket);
     }
+
     close(socket_fd);
+    pthread_mutex_destroy(&lock);
     if (remove(output_file_path) < 0) {
         syslog(LOG_ERR, "Failed to remove the file, error: %s", strerror(errno));
         exit(EXIT_FAILURE);
