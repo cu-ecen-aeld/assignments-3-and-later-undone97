@@ -1,29 +1,28 @@
-#CROSS_COMPILE=/home/bruno/Desktop/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-
-CROSS_COMPILE=
-#GCC=$(CROSS_COMPILE)gcc
+CROSS_COMPILE=/home/bruno/Desktop/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-
+#CROSS_COMPILE=
+CC ?= $(CROSS_COMPILE)gcc
 ifndef CROSS_COMPILE
-	GCC=gcc
+	CC?=gcc
 else
-	GCC=$(CROSS_COMPILE)gcc
+	CC?=$(CROSS_COMPILE)gcc
 endif
 
-CFLAGS	= -Wall -Werror -g0 -pthread
-#CFLAGS=
+CFLAGS	?= -Wall -Werror -g0 -pthread
 INPUT 	= aesdsocket.c
-OUTPUT	= aesdsocket
+TARGET	= aesdsocket
 .SILENT: clean
 default: $(INPUT)
 	echo "Building server"
-	$(GCC) $(CFLAGS) $(INPUT) -o $(OUTPUT)
+	$(CC) $(CFLAGS) $(INPUT) -o $(TARGET)
 
 clean:
-	if [ ! -e $(OUTPUT) ]; \
+	if [ ! -e $(TARGET) ]; \
 	then \
 		echo "Nothing to be done"; \
 	else \
 		echo "Cleaning objects"; \
-		rm $(OUTPUT); \
+		rm $(TARGET); \
 	fi
 	
 all:
-	$(GCC) $(CFLAGS) $(INPUT) -o $(OUTPUT) 
+	$(CC) $(CFLAGS) $(INPUT) -o $(OUTPUT) 
