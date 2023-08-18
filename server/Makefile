@@ -7,14 +7,20 @@ else
 	CC?=$(CROSS_COMPILE)gcc
 endif
 
-CFLAGS	?= -Wall -Werror -g0 -pthread
+CFLAGS	?= -Wall -Werror -g0
 LDFLAGS?=-lrt -pthread
-INPUT 	= aesdsocket.c
-TARGET	= aesdsocket
+TARGET	?= aesdsocket
+INPUT = $(TARGET).c
+
 .SILENT: clean
-default: $(INPUT)
+
+.PHONY: all clean
+
+$(TARGET): $(INPUT)
 	echo "Building server"
-	$(CC) $(CFLAGS) $(INPUT) -o $(TARGET)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
 
 clean:
 	if [ ! -e $(TARGET) ]; \
@@ -26,4 +32,4 @@ clean:
 	fi
 	
 all:
-	$(CC) $(CFLAGS) $(INPUT) -o $(OUTPUT) 
+	$(TARGET) 
