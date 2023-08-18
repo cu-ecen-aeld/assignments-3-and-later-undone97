@@ -8,6 +8,7 @@ else
 endif
 
 CFLAGS	?= -Wall -Werror -g0 -pthread
+LDFLAGS?=-lrt -pthread
 INPUT 	= aesdsocket.c
 TARGET	= aesdsocket
 .SILENT: clean
